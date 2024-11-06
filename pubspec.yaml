@@ -1,3 +1,9 @@
+##### TODO #####
+# 1. Return Employee Name with Login
+# 
+# 
+# 
+
 name: aotm_fe_2
 description: "Frontend built in Flutter for Octaknight AOTM."
 
@@ -34,11 +40,15 @@ dependencies:
 
   provider: ^6.0.0
 
-  flutter_svg: ^0.22.0
+  flutter_svg: ^2.0.13
 
-  http: ^0.13.3
+  http: ^1.2.2
 
   fluttertoast: ^8.0.8
+
+  flutter_secure_storage: ^9.2.2
+
+  # universal_html: ^2.2.4
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.

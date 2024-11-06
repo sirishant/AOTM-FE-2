@@ -29,14 +29,22 @@ class StartPage extends StatefulWidget {
 class StartPageState extends State<StartPage> {
   double _arrowOpacity = 1.0;
 
+  Timer? _timer;
+
   @override
   void initState() {
     super.initState();
-    Timer.periodic(Duration(seconds: 1), (timer) {
+    _timer = Timer.periodic(Duration(seconds: 1), (timer) {
       setState(() {
         _arrowOpacity = _arrowOpacity == 1.0 ? 0.0 : 1.0;
       });
     });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -82,7 +90,7 @@ class StartPageState extends State<StartPage> {
                       'assets/icons/octaknight_logo.svg',
                       semanticsLabel: 'Octaknight Logo',
                       width: 400,
-                      color: Colors.black,
+                      colorFilter: ColorFilter.mode(Theme.of(context).colorScheme.primary, BlendMode.srcIn),
                     ),
                     SizedBox(height: 20),
                     Text(
