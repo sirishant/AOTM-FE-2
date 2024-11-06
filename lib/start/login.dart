@@ -1,6 +1,48 @@
 import 'package:flutter/material.dart';
+import './loginservice.dart';
 
-class LoginPage extends StatelessWidget {
+import 'package:fluttertoast/fluttertoast.dart';
+
+class LoginPage extends StatefulWidget {
+  @override
+  LoginPageState createState() => LoginPageState();
+}
+
+class LoginPageState extends State<LoginPage> {
+  final TextEditingController _usernameController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final LoginService _loginService = LoginService(baseUrl: 'https://100.100.187.101:8443');
+
+  void _login() async {
+    try {
+      final response = await _loginService.login(_usernameController.text, _passwordController.text);
+      print('Login successful: $response');
+    } catch (e) {
+      print('Login failed: $e');
+      if (e.toString().contains('401')) {
+        Fluttertoast.showToast(
+          msg: "Incorrect credentials. Please try again",
+          toastLength: Toast.LENGTH_SHORT,
+          gravity: ToastGravity.BOTTOM,
+          timeInSecForIosWeb: 1,
+          backgroundColor: Colors.red,
+          textColor: Colors.white,
+          fontSize: 16.0
+        );
+      } else {
+        Fluttertoast.showToast(
+          msg: "Internal server error: $e",
+          toastLength: Toast.LENGTH_SHORT,
+          gravity: ToastGravity.BOTTOM,
+          timeInSecForIosWeb: 1,
+          backgroundColor: Colors.yellow,
+          textColor: Colors.black,
+          fontSize: 16.0
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     var isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
@@ -43,6 +85,7 @@ class LoginPage extends StatelessWidget {
                           Padding(
                             padding: const EdgeInsets.fromLTRB(150, 0, 150, 0),
                             child: TextField(
+                              controller: _usernameController,
                               decoration: InputDecoration(labelText: 'Username'),
                             ),
                           ),
@@ -50,13 +93,14 @@ class LoginPage extends StatelessWidget {
                           Padding(
                             padding: const EdgeInsets.fromLTRB(150, 0, 150, 0),
                             child: TextField(
+                              controller: _passwordController,
                               decoration: InputDecoration(labelText: 'Password'),
                               obscureText: true,
                             ),
                           ),
                           SizedBox(height: 30),
                           ElevatedButton(
-                            onPressed: () {},
+                            onPressed: _login,
                             child: Text('Sign In'),
                           ),
                         ],
@@ -81,6 +125,7 @@ class LoginPage extends StatelessWidget {
                     Padding(
                       padding: const EdgeInsets.fromLTRB(150, 0, 150, 0),
                       child: TextField(
+                        controller: _usernameController,
                         decoration: InputDecoration(labelText: 'Username'),
                       ),
                     ),
@@ -88,13 +133,14 @@ class LoginPage extends StatelessWidget {
                     Padding(
                       padding: const EdgeInsets.fromLTRB(150, 0, 150, 0),
                       child: TextField(
+                        controller: _passwordController,
                         decoration: InputDecoration(labelText: 'Password'),
                         obscureText: true,
                       ),
                     ),
                     SizedBox(height: 30),
                     ElevatedButton(
-                      onPressed: () {},
+                      onPressed: _login,
                       child: Text('Sign In'),
                     ),
                   ],

@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import './login.dart'; // Import the second page
+import 'start/login.dart'; // Import the second page
 
 void main() {
   runApp(AotmApp());
