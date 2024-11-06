@@ -23,10 +23,10 @@ class AotmApp extends StatelessWidget {
 
 class StartPage extends StatefulWidget {
   @override
-  _StartPageState createState() => _StartPageState();
+  StartPageState createState() => StartPageState();
 }
 
-class _StartPageState extends State<StartPage> {
+class StartPageState extends State<StartPage> {
   double _arrowOpacity = 1.0;
 
   @override
@@ -51,7 +51,22 @@ class _StartPageState extends State<StartPage> {
             print('Swipe up detected');
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => LoginPage()),
+                PageRouteBuilder(
+                pageBuilder: (context, animation, secondaryAnimation) => LoginPage(),
+                transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                  const begin = Offset(0.0, 1.0);
+                  const end = Offset.zero;
+                  const curve = Curves.ease;
+
+                  var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+                  var offsetAnimation = animation.drive(tween);
+
+                  return SlideTransition(
+                  position: offsetAnimation,
+                  child: child,
+                  );
+                },
+                ),
             );
           }
         },
