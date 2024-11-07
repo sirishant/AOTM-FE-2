@@ -64,13 +64,13 @@ class Job {
 }
 
 class JobTool {
-  final int id;
+  int id = 0;
   final Tool tool;
   final int quantity;
   final int takenQuantity;
 
   JobTool({
-    required this.id,
+    this.id = 0,
     required this.tool,
     required this.quantity,
     required this.takenQuantity,
