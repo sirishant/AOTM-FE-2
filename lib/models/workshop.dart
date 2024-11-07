@@ -4,10 +4,14 @@ class Workshop {
 
   Workshop({required this.workshopId, required this.workshopName});
 
+  const Workshop.nullWorkshop()
+      : workshopId = -1,
+        workshopName = 'null';
+
   factory Workshop.fromJson(Map<String, dynamic> json) {
     return Workshop(
-      workshopId: json['workshopId'],
-      workshopName: json['workshopName'],
+      workshopId: json['workshopId'] ?? -1,
+      workshopName: json['workshopName'] ?? 'null',
     );
   }
 

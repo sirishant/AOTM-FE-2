@@ -22,20 +22,18 @@ class AdminDashboardState extends State<AdminDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    Widget page;
+    Widget page = AdminDashHome();
 
     switch (_selectedIndex) {
       case 0:
         page = AdminDashHome();
-        break;
       case 1:
         page = Jobs();
-        break;
       case 2:
         page = Placeholder();
-        break;
       case 3:
         page = Placeholder();
+      case 4:
         break;
       default:
         throw UnimplementedError('no widget for index $_selectedIndex');
@@ -48,7 +46,7 @@ class AdminDashboardState extends State<AdminDashboard> {
         actions: [
           IconButton(
             icon: Icon(Icons.logout),
-            onPressed: _handleLogout,
+            onPressed: () => _handleLogout(),
           ),
         ],
       ),
@@ -58,9 +56,11 @@ class AdminDashboardState extends State<AdminDashboard> {
             child: NavigationRail(
               selectedIndex: _selectedIndex,
               onDestinationSelected: (int index) {
-                setState(() {
-                  _selectedIndex = index;
-                });
+                if (mounted) {
+                  setState(() {
+                    _selectedIndex = index;
+                  });
+                }
               },
               labelType: NavigationRailLabelType.selected,
               destinations: [
@@ -85,6 +85,29 @@ class AdminDashboardState extends State<AdminDashboard> {
                   label: Text('Tools'),
                 ),
               ],
+              trailing: Align(
+                alignment: Alignment.bottomCenter,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: SvgPicture.asset(
+                        'assets/icons/octaknight_logo.svg',
+                        semanticsLabel: 'About Octaknight',
+                        width: 24,
+                        height: 24,
+                        colorFilter: ColorFilter.mode(
+                            Theme.of(context).iconTheme.color!,
+                            BlendMode.srcIn),
+                      ),
+                      onPressed: () {
+                        _showAboutDialog(context);
+                      },
+                    ),
+                    SizedBox(height: 10), // Add some spacing if needed
+                  ],
+                ),
+              ),
             ),
           ),
           Expanded(
@@ -149,29 +172,29 @@ class AdminDashHomeState extends State<AdminDashHome> {
   Future<void> _loadNotifications() async {
     List<CustomNotification> fetchedNotifications = await _getNotifications();
     if (mounted) {
-    setState(() {
-      notifications = fetchedNotifications;
-      _notificationItems = notifications
-          .map((notification) => Item(
-                type: notification.type,
-                workshopName: notification.workshopName,
-                headerValue: notification.title,
-                expandedValue: '${notification.description}',
-                data: {
-                  if (notification.type == 'LOW_STOCK' ||
-                      notification.type == 'MEDIUM_STOCK') ...{
-                    'stockNotifications':
-                        (notification.data['toolmaps'] as List<dynamic>)
-                            .map((json) => StockNotification.fromJson(json))
-                            .toList(),
-                  } else ...{
-                    'specialNotification':
-                        SpecialNotification.fromJson(notification.data),
-                  }
-                },
-              ))
-          .toList();
-    });
+      setState(() {
+        notifications = fetchedNotifications;
+        _notificationItems = notifications
+            .map((notification) => Item(
+                  type: notification.type,
+                  workshopName: notification.workshopName,
+                  headerValue: notification.title,
+                  expandedValue: '${notification.description}',
+                  data: {
+                    if (notification.type == 'LOW_STOCK' ||
+                        notification.type == 'MEDIUM_STOCK') ...{
+                      'stockNotifications':
+                          (notification.data['toolmaps'] as List<dynamic>)
+                              .map((json) => StockNotification.fromJson(json))
+                              .toList(),
+                    } else ...{
+                      'specialNotification':
+                          SpecialNotification.fromJson(notification.data),
+                    }
+                  },
+                ))
+            .toList();
+      });
     }
   }
 
@@ -234,13 +257,10 @@ class AdminDashHomeState extends State<AdminDashHome> {
                               switch (dispenser.alertLevel) {
                                 case 'HIGH':
                                   color = Colors.red;
-                                  break;
                                 case 'MEDIUM':
                                   color = Colors.orange;
-                                  break;
                                 case 'LOW':
                                   color = Colors.white70;
-                                  break;
                                 default:
                                   color = Colors.grey;
                               }
@@ -662,4 +682,37 @@ class SpecialNotification {
   String toString() {
     return 'SpecialNotification{employeeName: $employeeName, quantity: $quantity, dispenserName: $dispenserName, reason: $reason, toolName: $toolName, time: $time}';
   }
+}
+
+void _showAboutDialog(BuildContext context) {
+  showDialog(
+    context: context,
+    builder: (BuildContext context) {
+      return AlertDialog(
+        title: Text('About Octaknight AOTM'),
+        content: SingleChildScrollView(
+          child: ListBody(
+            children: <Widget>[
+              Text('Octaknight AOTM'),
+              SizedBox(height: 10),
+              Text('Version: 1.0.0'),
+              SizedBox(height: 10),
+              Text('Developed by: Octaknight Team'),
+              SizedBox(height: 10),
+              Text(
+                  'Description: This is a placeholder description for the Octaknight AOTM system.'),
+            ],
+          ),
+        ),
+        actions: <Widget>[
+          TextButton(
+            child: Text('Close'),
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+          ),
+        ],
+      );
+    },
+  );
 }
