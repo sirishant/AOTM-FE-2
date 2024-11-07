@@ -28,15 +28,19 @@ class LoginPageState extends State<LoginPage> {
       final response = await _loginService.login(
           _usernameController.text, _passwordController.text);
 
-      // Store all the auth data
-      await authStorage.saveToken(response['token']);
-      await authStorage.saveExpiry(response['expiry']);
-      await authStorage.saveRole(response['role']);
-      await authStorage.saveEmpId(response['empId']);
-      await authStorage.saveWorkshopId(response['workshopId']);
+      if (response['token'] != null) {
+        // Store all the auth data
+        await authStorage.saveToken(response['token']);
+        await authStorage.saveExpiry(response['expiry']);
+        await authStorage.saveRole(response['role']);
+        await authStorage.saveEmpId(response['empId']);
+        await authStorage.saveWorkshopId(response['workshopId']);
 
-      // Navigate based on role
-      _handleSuccessfulLogin(response['role']);
+        // Navigate based on role
+        _handleSuccessfulLogin(response['role']);
+      } else {
+        throw Exception('Login failed 500');
+      }
     } catch (e) {
       print('Login failed: $e');
       if (e.toString().contains('401')) {

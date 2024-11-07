@@ -1,8 +1,13 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+AndroidOptions _getAndroidOptions() => const AndroidOptions(
+        encryptedSharedPreferences: true,
+      );
+
 class AuthStorageService {
   static const String _tokenKey = 'auth_token';
-  final _storage = const FlutterSecureStorage();
+
+  final _storage = FlutterSecureStorage(aOptions: _getAndroidOptions());
 
   // Save token
   Future<void> saveToken(String token) async {
