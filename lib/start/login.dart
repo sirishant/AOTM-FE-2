@@ -1,3 +1,4 @@
+import 'package:aotm_fe_2/config.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'login_service.dart';
@@ -19,7 +20,7 @@ class LoginPageState extends State<LoginPage> {
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final LoginService _loginService =
-      LoginService(baseUrl: 'https://100.100.187.101:8443');
+      LoginService(baseUrl: baseUrl);
 
   void _login() async {
     final authStorage = AuthStorageService();

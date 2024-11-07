@@ -1,11 +1,16 @@
+import 'package:aotm_fe_2/admin/dispenser_tools.dart';
+import 'package:aotm_fe_2/admin/jobs.dart';
 import 'package:aotm_fe_2/main.dart';
 import 'package:aotm_fe_2/models/dispenser.dart';
+import 'package:aotm_fe_2/models/workshop.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../start/auth_storage_service.dart';
 import 'authenticated_client.dart';
 import '../models/notification.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import '../config.dart';
 
 class AdminDashboard extends StatefulWidget {
   @override
@@ -22,19 +27,24 @@ class AdminDashboardState extends State<AdminDashboard> {
     switch (_selectedIndex) {
       case 0:
         page = AdminDashHome();
+        break;
       case 1:
-        page = Placeholder();
+        page = Jobs();
+        break;
       case 2:
         page = Placeholder();
+        break;
       case 3:
         page = Placeholder();
+        break;
       default:
         throw UnimplementedError('no widget for index $_selectedIndex');
     }
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Welcome, Admin!', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w400)),
+        title: Text('Welcome, Admin!',
+            style: TextStyle(color: Colors.black, fontWeight: FontWeight.w400)),
         actions: [
           IconButton(
             icon: Icon(Icons.logout),
@@ -109,6 +119,7 @@ class AdminDashHome extends StatefulWidget {
 }
 
 class AdminDashHomeState extends State<AdminDashHome> {
+  List<Workshop> workshops = [];
   List<Dispenser> dispensers = [];
   List<CustomNotification> notifications = [];
   List<Item> _notificationItems = [];
@@ -116,8 +127,16 @@ class AdminDashHomeState extends State<AdminDashHome> {
   @override
   void initState() {
     super.initState();
+    _loadWorkshops();
     _loadDispensers();
     _loadNotifications();
+  }
+
+  Future<void> _loadWorkshops() async {
+    List<Workshop> fetchedWorkshops = await _getWorkshops();
+    setState(() {
+      workshops = fetchedWorkshops;
+    });
   }
 
   Future<void> _loadDispensers() async {
@@ -129,6 +148,7 @@ class AdminDashHomeState extends State<AdminDashHome> {
 
   Future<void> _loadNotifications() async {
     List<CustomNotification> fetchedNotifications = await _getNotifications();
+    if (mounted) {
     setState(() {
       notifications = fetchedNotifications;
       _notificationItems = notifications
@@ -138,18 +158,21 @@ class AdminDashHomeState extends State<AdminDashHome> {
                 headerValue: notification.title,
                 expandedValue: '${notification.description}',
                 data: {
-                  if (notification.type == 'LOW_STOCK' || notification.type == 'MEDIUM_STOCK') ...{
-                    'stockNotifications': (notification.data['toolmaps'] as List<dynamic>)
-                        .map((json) => StockNotification.fromJson(json))
-                        .toList(),
+                  if (notification.type == 'LOW_STOCK' ||
+                      notification.type == 'MEDIUM_STOCK') ...{
+                    'stockNotifications':
+                        (notification.data['toolmaps'] as List<dynamic>)
+                            .map((json) => StockNotification.fromJson(json))
+                            .toList(),
                   } else ...{
-                    'specialNotification': SpecialNotification.fromJson(notification.data),
+                    'specialNotification':
+                        SpecialNotification.fromJson(notification.data),
                   }
                 },
               ))
           .toList();
     });
-    print('Notification items: $_notificationItems');
+    }
   }
 
   List<Item> generateItems(List<CustomNotification> notifications) {
@@ -160,12 +183,15 @@ class AdminDashHomeState extends State<AdminDashHome> {
         headerValue: notifications[index].title,
         expandedValue: notifications[index].description,
         data: {
-          if (notifications[index].type == 'LOW_STOCK' || notifications[index].type == 'MEDIUM_STOCK') ...{
-            'stockNotifications': (notifications[index].data['toolmaps'] as List<dynamic>)
-                .map((json) => StockNotification.fromJson(json))
-                .toList(),
+          if (notifications[index].type == 'LOW_STOCK' ||
+              notifications[index].type == 'MEDIUM_STOCK') ...{
+            'stockNotifications':
+                (notifications[index].data['toolmaps'] as List<dynamic>)
+                    .map((json) => StockNotification.fromJson(json))
+                    .toList(),
           } else ...{
-            'specialNotification': SpecialNotification.fromJson(notifications[index].data),
+            'specialNotification':
+                SpecialNotification.fromJson(notifications[index].data),
           }
         },
       );
@@ -182,74 +208,113 @@ class AdminDashHomeState extends State<AdminDashHome> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ...dispensers
-                    .fold<Map<String, List<Dispenser>>>({}, (map, dispenser) {
-                      if (!map.containsKey(dispenser.workshop.workshopName)) {
-                        map[dispenser.workshop.workshopName] = [];
-                      }
-                      map[dispenser.workshop.workshopName]!.add(dispenser);
-                      return map;
-                    })
-                    .entries
-                    .map((entry) {
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                ...workshops.map((workshop) {
+                  final workshopDispensers = dispensers
+                      .where((dispenser) =>
+                          dispenser.workshop.workshopName ==
+                          workshop.workshopName)
+                      .toList();
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Text(
+                          '${workshop.workshopName}',
+                          style: TextStyle(fontSize: 15),
+                        ),
+                      ),
+                      Row(
                         children: [
-                          Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: Text(
-                              '${entry.key}',
-                              style: TextStyle(fontSize: 15),
-                            ),
-                          ),
                           Wrap(
                             spacing: 8.0,
                             runSpacing: 8.0,
-                            children: entry.value.map((dispenser) {
+                            children: workshopDispensers.map((dispenser) {
                               Color color;
                               switch (dispenser.alertLevel) {
                                 case 'HIGH':
                                   color = Colors.red;
+                                  break;
                                 case 'MEDIUM':
                                   color = Colors.orange;
+                                  break;
                                 case 'LOW':
                                   color = Colors.white70;
+                                  break;
                                 default:
                                   color = Colors.grey;
                               }
-                                return Card(
-                                color: color,
-                                child: Padding(
-                                  padding: const EdgeInsets.all(30.0),
-                                  child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                    Icons.print_outlined,
-                                    size: 50.0, // Increase the size of the icon
-                                    color: Colors.black,
+                              return SizedBox(
+                                  width: 175, // Set a fixed width for the card
+                                  child: InkWell(
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                            builder: (context) =>
+                                                DispenserTools()),
+                                      );
+                                    },
+                                    child: SizedBox(
+                                      width:
+                                          175, // Set a fixed width for the card
+                                      child: Card(
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(10.0),
+                                        ),
+                                        color: color,
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(30.0),
+                                          child: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.print_outlined,
+                                                size:
+                                                    50.0, // Increase the size of the icon
+                                                color: Colors.black,
+                                              ),
+                                              SizedBox(height: 8.0),
+                                              Text(
+                                                dispenser.dispenserName,
+                                                style: TextStyle(
+                                                  fontSize: 16.0,
+                                                  color: Colors.black,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
                                     ),
-                                    SizedBox(height: 8.0),
-                                    Text(
-                                    dispenser.dispenserName,
-                                    style: TextStyle(
-                                      fontSize: 16.0,
-                                      color: Colors.black,
-                                    ),
-                                    ),
-                                  ],
-                                  ),
-                                ),
-                                );
+                                  ));
                             }).toList(),
                           ),
+                          SizedBox(width: 20),
+                          IconButton(
+                            icon: Icon(Icons.add),
+                            onPressed: () {
+                              _addDispenser(workshop.workshopName);
+                            },
+                          ),
                         ],
-                      );
-                    })
-                    .toList(),
+                      ),
+                    ],
+                  );
+                }).toList(),
+                SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: () {
+                    _addWorkshop();
+                  },
+                  child: Text('New Workshop'),
+                ),
                 SizedBox(height: 20),
                 Center(
-                    child: Text('Analytics', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w500))),
+                    child: Text('Analytics',
+                        style: TextStyle(
+                            fontSize: 20, fontWeight: FontWeight.w500))),
                 SizedBox(height: 20),
                 Placeholder(),
               ],
@@ -258,11 +323,22 @@ class AdminDashHomeState extends State<AdminDashHome> {
           SizedBox(width: 20),
           Column(
             children: [
-              Text('Notifications', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w500)),
+              Text('Notifications',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w500)),
               SizedBox(height: 20),
               _buildNotificationsList(),
+              SizedBox(height: 80),
+              SvgPicture.asset(
+                'assets/icons/octaknight_logo.svg',
+                semanticsLabel: 'Octaknight Logo',
+                width: 200,
+                colorFilter: ColorFilter.mode(
+                    Theme.of(context).colorScheme.primary, BlendMode.srcIn),
+              ),
+              SizedBox(height: 20),
             ],
           ),
+          SizedBox(width: 20),
         ],
       ),
     );
@@ -279,8 +355,7 @@ class AdminDashHomeState extends State<AdminDashHome> {
                 expansionCallback: (int index, bool isExpanded) {
                   setState(() {
                     _notificationItems[index].isExpanded =
-                        !_notificationItems[index]
-                            .isExpanded;
+                        !_notificationItems[index].isExpanded;
                   });
                 },
                 children: _notificationItems.map<ExpansionPanel>((Item item) {
@@ -297,41 +372,54 @@ class AdminDashHomeState extends State<AdminDashHome> {
                       );
                     },
                     body: ListTile(
-                      title: Text(
-                        item.type == 'SPECIAL_HISTORY'
-                          ? 'Tool not physically returned.'
-                          : 'Refill immediately to avoid downtime.',
-                        style: TextStyle(fontSize: 14.0),
-                      ),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (item.data.containsKey('stockNotifications')) ...[
-                            for (StockNotification stockNotification
-                                in item.data['stockNotifications'])
+                        title: Text(
+                          item.type == 'SPECIAL_HISTORY'
+                              ? 'Tool not physically returned.'
+                              : 'Refill immediately to avoid downtime.',
+                          style: TextStyle(fontSize: 14.0),
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (item.data
+                                .containsKey('stockNotifications')) ...[
+                              for (StockNotification stockNotification
+                                  in item.data['stockNotifications'])
+                                Text(
+                                  '${stockNotification.toolName} [${stockNotification.currentQuantity}/${stockNotification.maxQuantity}]',
+                                  style: TextStyle(fontSize: 12.0),
+                                ),
+                            ] else ...[
                               Text(
-                                '${stockNotification.toolName} [${stockNotification.currentQuantity}/${stockNotification.maxQuantity}]',
-                                style: TextStyle(fontSize: 12.0),
-                              ),
-                          ] else ...[
-                            Text(
-                              '''Quantity: ${item.data['specialNotification'].quantity}
+                                '''Quantity: ${item.data['specialNotification'].quantity}
 Reason: ${item.data['specialNotification'].reason}
 Time: ${item.data['specialNotification'].time}''',
-                              style: TextStyle(fontSize: 12.0),
-                            ),
-                          ]
-                        ],
-                      )
-                    ),
+                                style: TextStyle(fontSize: 12.0),
+                              ),
+                            ]
+                          ],
+                        )),
                     isExpanded: item.isExpanded,
                   );
                 }).toList(),
               ));
   }
 
+  Future<List<Workshop>> _getWorkshops() async {
+    final client = AuthenticatedClient(http.Client(), AuthStorageService());
+    final uri = Uri.parse('$baseUrl/workshops');
+    final response = await client.get(uri);
+
+    if (response.statusCode == 200) {
+      final List<dynamic> jsonResponse = json.decode(response.body);
+      return jsonResponse.map((json) => Workshop.fromJson(json)).toList();
+    } else {
+      print('Failed to get workshops with status code: ${response.statusCode}');
+      return [];
+    }
+  }
+
   Future<List<Dispenser>> _getDispensers() async {
-    String baseUrl = 'https://100.100.187.101:8443';
     final client = AuthenticatedClient(http.Client(), AuthStorageService());
     final uri = Uri.parse('$baseUrl/dispensers');
     final response = await client.get(uri);
@@ -347,7 +435,6 @@ Time: ${item.data['specialNotification'].time}''',
   }
 
   Future<List<CustomNotification>> _getNotifications() async {
-    String baseUrl = 'https://100.100.187.101:8443';
     final client = AuthenticatedClient(http.Client(), AuthStorageService());
     final uri = Uri.parse('$baseUrl/notifications/');
     final response = await client.get(uri);
@@ -361,6 +448,137 @@ Time: ${item.data['specialNotification'].time}''',
       print(
           'Failed to get notifications with status code: ${response.statusCode}');
       return [];
+    }
+  }
+
+  void _addDispenser(String workshopName) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final dispenserNameController = TextEditingController();
+        return AlertDialog(
+          title: Text('Add Dispenser'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: dispenserNameController,
+                decoration: InputDecoration(
+                  labelText: 'Dispenser Name',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                _addDispenserToWorkshop(
+                    dispenserNameController.text, workshopName);
+                Navigator.of(context).pop();
+              },
+              child: Text('Add'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _addDispenserToWorkshop(
+      String dispenserName, String workshopName) async {
+    // get workshopId from workshopName
+    final workshop = workshops.firstWhere(
+        (workshop) => workshop.workshopName == workshopName,
+        orElse: () => Workshop(workshopName: 'null', workshopId: -1));
+
+    print(
+        'Attempting to add dispenser $dispenserName to workshop ${workshop.workshopId}');
+
+    if (workshop.workshopId == -1) {
+      throw Exception('Workshop not found');
+    }
+
+    final client = AuthenticatedClient(http.Client(), AuthStorageService());
+    final uri = Uri.parse('$baseUrl/dispensers');
+    final response = await client.post(
+      uri,
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'dispenserName': dispenserName,
+        'workshopId': workshop.workshopId,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      print('Dispenser added successfully');
+      _loadDispensers();
+    } else {
+      print('Failed to add dispenser with status code: ${response.statusCode}');
+    }
+  }
+
+  void _addWorkshop() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final workshopNameController = TextEditingController();
+        return AlertDialog(
+          title: Text('Add Workshop'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: workshopNameController,
+                decoration: InputDecoration(
+                  labelText: 'Workshop Name',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                _addWorkshopToDatabase(workshopNameController.text);
+                Navigator.of(context).pop();
+              },
+              child: Text('Add'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _addWorkshopToDatabase(String workshopName) async {
+    print('Attempting to add workshop $workshopName');
+
+    final client = AuthenticatedClient(http.Client(), AuthStorageService());
+    final uri = Uri.parse('$baseUrl/workshops');
+    final response = await client.post(
+      uri,
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'name': workshopName,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      print('Workshop added successfully');
+      _loadWorkshops();
+    } else {
+      print('Failed to add workshop with status code: ${response.statusCode}');
     }
   }
 }
@@ -410,7 +628,6 @@ class StockNotification {
   String toString() {
     return 'StockNotification{maxQuantity: $maxQuantity, currentQuantity: $currentQuantity, toolName: $toolName}';
   }
-
 }
 
 class SpecialNotification {
