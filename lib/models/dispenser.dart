@@ -44,3 +44,9 @@ class Dispenser {
     return 'Dispenser{dispenserNo: $dispenserNo, alertLevel: $alertLevel, dispenserName: $dispenserName, maxX: $maxX, maxZ: $maxZ, workshop: $workshop}';
   }
 }
+
+enum AlertLevel {
+  LOW,
+  MEDIUM,
+  HIGH
+}

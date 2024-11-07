@@ -474,7 +474,7 @@ Time: ${item.data['specialNotification'].time}''',
   void _addDispenser(String workshopName) {
     showDialog(
       context: context,
-      builder: (context) {
+      builder: (BuildContext context) {
         final dispenserNameController = TextEditingController();
         return AlertDialog(
           title: Text('Add Dispenser'),

@@ -16,6 +16,7 @@ class LoginPage extends StatefulWidget {
 
 class LoginPageState extends State<LoginPage> {
   Timer? _timer;
+  late FToast fToast;
 
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
@@ -45,25 +46,35 @@ class LoginPageState extends State<LoginPage> {
     } catch (e) {
       print('Login failed: $e');
       if (e.toString().contains('401')) {
-        Fluttertoast.showToast(
-            msg: "Incorrect credentials. Please try again",
-            toastLength: Toast.LENGTH_SHORT,
-            gravity: ToastGravity.BOTTOM,
-            timeInSecForIosWeb: 1,
-            backgroundColor: Colors.red,
-            textColor: Colors.white,
-            fontSize: 16.0);
+        _showToast("Incorrect credentials. Please try again", Colors.red, Colors.white);
       } else {
-        Fluttertoast.showToast(
-            msg: "Internal server error: $e",
-            toastLength: Toast.LENGTH_SHORT,
-            gravity: ToastGravity.BOTTOM,
-            timeInSecForIosWeb: 1,
-            backgroundColor: Colors.yellow,
-            textColor: Colors.black,
-            fontSize: 16.0);
+        _showToast("Internal server error: $e", Colors.yellow, Colors.black);
       }
     }
+  }
+
+  void _showToast(String message, Color backgroundColor, Color textColor) {
+    Widget toast = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12.0),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(25.0),
+        color: backgroundColor,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.info, color: Colors.white),
+          SizedBox(width: 12.0),
+          Text(message, style: TextStyle(color: textColor)),
+        ],
+      ),
+    );
+
+    fToast.showToast(
+      child: toast,
+      gravity: ToastGravity.BOTTOM,
+      toastDuration: Duration(seconds: 2),
+    );
   }
 
   void _handleSuccessfulLogin(String role) {
@@ -80,6 +91,8 @@ class LoginPageState extends State<LoginPage> {
   @override
   void initState() {
     super.initState();
+    fToast = FToast();
+    fToast.init(context);
     _timer = Timer(Duration(seconds: 60), () {
       Navigator.of(context).pop();
     });

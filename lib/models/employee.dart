@@ -1,27 +1,3 @@
-// {
-//   "empId": 1,
-//   "firstname": "sultan",
-//   "lastname": "khan pathan",
-//   "username": "dictator",
-//   "designation": "ROLE_USER",
-//   "nfcTagId": 1,
-//   "password": "111111",
-//   "workshop": {
-//     "workshopId": 1,
-//     "workshopName": "Workshop One"
-//   },
-//   "enabled": true,
-//   "employeeName": "sultan khan pathan",
-//   "authorities": [
-//     {
-//       "authority": "ROLE_USER"
-//     }
-//   ],
-//   "accountNonExpired": true,
-//   "accountNonLocked": true,
-//   "credentialsNonExpired": true
-// }
-
 import 'package:aotm_fe_2/models/workshop.dart';
 
 class Employee {
