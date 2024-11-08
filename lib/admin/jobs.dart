@@ -25,6 +25,7 @@ class JobsState extends State<Jobs> {
   List<Workshop> workshops = [];
   List<Machine> machines = [];
   List<Tool> tools = [];
+  List<Employee> employees = [];
 
   @override
   void initState() {
@@ -33,6 +34,7 @@ class JobsState extends State<Jobs> {
     _loadWorkshops();
     _loadMachines();
     _loadTools();
+    _loadEmployees();
   }
 
   void refreshJobs() async {
@@ -65,6 +67,15 @@ class JobsState extends State<Jobs> {
     if (mounted) {
       setState(() {
         tools = fetchedTools;
+      });
+    }
+  }
+
+  Future<void> _loadEmployees() async {
+    List<Employee> fetchedEmployees = await _getEmployees();
+    if (mounted) {
+      setState(() {
+        employees = fetchedEmployees;
       });
     }
   }
@@ -121,6 +132,20 @@ class JobsState extends State<Jobs> {
       return jsonResponse.map((json) => Tool.fromJson(json)).toList();
     } else {
       print('Failed to get tools with status code: ${response.statusCode}');
+      return [];
+    }
+  }
+
+  Future<List<Employee>> _getEmployees() async {
+    final client = AuthenticatedClient(http.Client(), AuthStorageService());
+    final uri = Uri.parse('$baseUrl/employees');
+    final response = await client.get(uri);
+
+    if (response.statusCode == 200) {
+      final List<dynamic> jsonResponse = json.decode(response.body);
+      return jsonResponse.map((json) => Employee.fromJson(json)).toList();
+    } else {
+      print('Failed to get employees with status code: ${response.statusCode}');
       return [];
     }
   }
@@ -355,6 +380,7 @@ class JobsState extends State<Jobs> {
                                         allJobs: allJobs,
                                         refreshJobs: refreshJobs,
                                         tools: tools,
+                                        employees: employees,
                                         navigatorKey: navigatorKey),
                                   ),
                                 ),
@@ -380,6 +406,7 @@ class ToolsDataTable extends StatelessWidget {
   final Function refreshJobs;
   final List<Job> allJobs;
   final List<Tool> tools;
+  final List<Employee> employees;
   final GlobalKey<NavigatorState> navigatorKey;
 
   ToolsDataTable({
@@ -387,8 +414,35 @@ class ToolsDataTable extends StatelessWidget {
     required this.allJobs,
     required this.refreshJobs,
     required this.tools,
+    required this.employees,
     required this.navigatorKey,
   });
+
+  Future<void> updateJobEmployees(int jobId, List<int> employeeIds) async {
+    final client = AuthenticatedClient(http.Client(), AuthStorageService());
+    final uri = Uri.parse('$baseUrl/jobs/$jobId/employees');
+
+    try {
+      final response = await client.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(employeeIds),
+      );
+
+      if (response.statusCode == 201) {
+        _showToast(
+            "Employees updated successfully", Colors.green, Colors.white);
+        refreshJobs();
+      } else {
+        _showToast(
+            "Failed to update employees with response ${response.statusCode}",
+            Colors.red,
+            Colors.white);
+      }
+    } catch (e) {
+      _showToast("Error: ${e.toString()}", Colors.red, Colors.white);
+    }
+  }
 
   void addToolsToJobInDatabase(
       int jobId, List<int> toolIds, List<int> quantities) async {
@@ -419,37 +473,186 @@ class ToolsDataTable extends StatelessWidget {
     }
   }
 
-  void addToolsToJob(BuildContext context) {
-    final controller = MultiSelectController<Tool>();
-    final quantitiesController = TextEditingController();
+  void showManagementDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Manage Job'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: Icon(Icons.build),
+                title: Text('Manage Tools'),
+                onTap: () {
+                  Navigator.pop(context);
+                  addToolsToJob(context);
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.people),
+                title: Text('Manage Employees'),
+                onTap: () {
+                  Navigator.pop(context);
+                  addEmployeesToJob(context);
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Cancel'),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
-    // Create items list from all available tools
-    var items = tools.map((tool) {
-      return DropdownItem(label: tool.toolName, value: tool);
+  void addEmployeesToJob(BuildContext context) {
+    final controller = MultiSelectController<Employee>();
+
+    // Create items list from all available employees
+    var items = employees.map((employee) {
+      bool isSelected = job.employees.any((emp) => emp.empId == employee.empId);
+      return DropdownItem(
+          label: '${employee.employeeName} (#${employee.empId})',
+          value: employee,
+          selected: isSelected);
     }).toList();
 
-    // Pre-select existing tools and set their quantities
-    List<String> initialQuantities = [];
-    List<DropdownItem<Tool>> preSelectedItems = [];
+    // Pre-select existing employees
+    List<DropdownItem<Employee>> preSelectedItems = [];
 
-    for (var jobTool in job.jobTools) {
+    for (var employee in job.employees) {
       var matchingItem = items.firstWhere(
-        (item) => item.value.toolId == jobTool.tool.toolId,
-        orElse: () => DropdownItem(label: '', value: jobTool.tool),
+        (item) => item.value.empId == employee.empId,
+        orElse: () => DropdownItem(label: '', value: employee),
       );
       preSelectedItems.add(matchingItem);
-      initialQuantities.add(jobTool.quantity.toString());
     }
 
     // Set initial values
     controller.setItems(preSelectedItems);
-    quantitiesController.text = initialQuantities.join(',');
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Manage Employees for Job'),
+          content: SizedBox(
+            width: MediaQuery.of(context).size.width * 0.5,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Job #${job.jobId} | ${job.title}'),
+                SizedBox(height: 16),
+                MultiDropdown<Employee>(
+                  items: items,
+                  controller: controller,
+                  enabled: true,
+                  searchEnabled: true,
+                  chipDecoration: const ChipDecoration(
+                    backgroundColor: Colors.blue,
+                    wrap: true,
+                    runSpacing: 2,
+                    spacing: 10,
+                    labelStyle: TextStyle(color: Colors.white),
+                  ),
+                  // chipDeleteIcon: const Icon(
+                  //   Icons.close,
+                  //   color: Colors.white,
+                  //   size: 18,
+                  // ),
+                  fieldDecoration: FieldDecoration(
+                    hintText: 'Select employees',
+                    hintStyle: const TextStyle(color: Colors.black54),
+                    prefixIcon: const Icon(Icons.person_add),
+                    showClearIcon: true,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Colors.grey),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Colors.black87),
+                    ),
+                  ),
+                  dropdownDecoration: DropdownDecoration(
+                    marginTop: 2,
+                    maxHeight: 500,
+                  ),
+                  dropdownItemDecoration: DropdownItemDecoration(
+                    selectedIcon:
+                        const Icon(Icons.check_box, color: Colors.green),
+                    disabledIcon: Icon(Icons.lock, color: Colors.grey.shade300),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () {
+                final selectedEmployees = controller.selectedItems
+                    .map((item) => item.value.empId)
+                    .toList();
+                updateJobEmployees(job.jobId, selectedEmployees);
+                Navigator.pop(context);
+              },
+              child: Text('Save Changes'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Cancel'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void addToolsToJob(BuildContext context) {
+    final controller = MultiSelectController<Tool>();
+    final quantitiesController = TextEditingController();
+    final quantityValidationErrors = <int, String>{};
+
+    // Create items list from all available tools with selection status
+    var items = tools.map((tool) {
+      bool isSelected =
+          job.jobTools.any((jobTool) => jobTool.tool.toolId == tool.toolId);
+      return DropdownItem(
+          label: tool.toolName,
+          value: tool,
+          selected: isSelected);
+    }).toList();
+
+    // Pre-select existing tools
+    List<DropdownItem<Tool>> preSelectedItems = job.jobTools.map((jobTool) {
+      return items.firstWhere(
+          (item) => item.value.toolId == jobTool.tool.toolId,
+          orElse: () => DropdownItem(label: '', value: jobTool.tool));
+    }).toList();
+
+    // Set initial items in controller
+    controller.setItems(preSelectedItems);
+
+    // Initial quantities for pre-selected tools
+    quantitiesController.text =
+        job.jobTools.map((jobTool) => jobTool.quantity.toString()).join(',');
 
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return StatefulBuilder(
           builder: (context, setState) {
+            // Get current selected tools for quantity fields
+            var selectedTools = controller.selectedItems.isNotEmpty
+                ? controller.selectedItems
+                : preSelectedItems;
+
             return AlertDialog(
               title: Text('Manage Tools for Job'),
               content: SizedBox(
@@ -458,48 +661,6 @@ class ToolsDataTable extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text('Job #${job.jobId} | ${job.title}'),
-                    SizedBox(height: 16),
-                    // Currently allocated tools section
-                    Container(
-                      width: double.infinity,
-                      padding: EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.grey[100],
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Currently Allocated Tools:',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          SizedBox(height: 4),
-                          if (job.jobTools.isNotEmpty)
-                            ...job.jobTools.map((jobTool) => Padding(
-                                  padding: EdgeInsets.only(left: 8, top: 4),
-                                  child: Text(
-                                    '${jobTool.tool.toolName} (Qty: ${jobTool.quantity})',
-                                    style: TextStyle(fontSize: 12),
-                                  ),
-                                ))
-                          else
-                            Padding(
-                              padding: EdgeInsets.only(left: 8, top: 4),
-                              child: Text(
-                                'No tools currently allocated',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontStyle: FontStyle.italic,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
                     SizedBox(height: 16),
                     MultiDropdown<Tool>(
                       items: items,
@@ -511,6 +672,7 @@ class ToolsDataTable extends StatelessWidget {
                         wrap: true,
                         runSpacing: 2,
                         spacing: 10,
+                        labelStyle: TextStyle(color: Colors.white),
                       ),
                       fieldDecoration: FieldDecoration(
                         hintText: 'Select tools from the list',
@@ -536,24 +698,19 @@ class ToolsDataTable extends StatelessWidget {
                         disabledIcon:
                             Icon(Icons.lock, color: Colors.grey.shade300),
                       ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please select at least one tool';
-                        }
-                        return null;
-                      },
                       onSelectionChange: (selectedItems) {
                         setState(() {
-                          List<String> newQuantities = [];
+                          List<String> quantities = [];
                           for (var item in selectedItems) {
                             var existingTool = job.jobTools.firstWhere(
                               (jobTool) => jobTool.tool.toolId == item.toolId,
                               orElse: () => JobTool(
                                   tool: item, quantity: 1, takenQuantity: 0),
                             );
-                            newQuantities.add(existingTool.quantity.toString());
+                            quantities.add(existingTool.quantity.toString());
                           }
-                          quantitiesController.text = newQuantities.join(',');
+                          quantitiesController.text = quantities.join(',');
+                          quantityValidationErrors.clear();
                         });
                       },
                     ),
@@ -562,10 +719,8 @@ class ToolsDataTable extends StatelessWidget {
                       child: SingleChildScrollView(
                         child: Column(
                           children: [
-                            ...controller.selectedItems.map((item) {
-                              int index =
-                                  controller.selectedItems.indexOf(item);
-                              String initialQuantity = '';
+                            ...selectedTools.map((item) {
+                              int index = selectedTools.indexOf(item);
                               var existingTool = job.jobTools.firstWhere(
                                 (jobTool) =>
                                     jobTool.tool.toolId == item.value.toolId,
@@ -574,22 +729,58 @@ class ToolsDataTable extends StatelessWidget {
                                     quantity: 1,
                                     takenQuantity: 0),
                               );
-                              initialQuantity =
-                                  existingTool.quantity.toString();
 
-                              return TextField(
-                                decoration: InputDecoration(
-                                  labelText: 'Quantity for ${item.label}',
+                              // Split current quantities
+                              List<String> currentQuantities =
+                                  quantitiesController.text.isEmpty
+                                      ? []
+                                      : quantitiesController.text.split(',');
+
+                              // Ensure we have a valid quantity for this index
+                              String initialQuantity =
+                                  currentQuantities.length > index
+                                      ? currentQuantities[index]
+                                      : existingTool.quantity.toString();
+
+                              return Padding(
+                                padding: EdgeInsets.only(bottom: 8.0),
+                                child: TextField(
+                                  decoration: InputDecoration(
+                                    labelText: 'Quantity for ${item.label}',
+                                    helperText: existingTool.takenQuantity > 0
+                                        ? 'Minimum quantity: ${existingTool.takenQuantity}'
+                                        : null,
+                                    errorText: quantityValidationErrors[
+                                        item.value.toolId],
+                                  ),
+                                  controller: TextEditingController(
+                                      text: initialQuantity),
+                                  onChanged: (value) {
+                                    setState(() {
+                                      String? error = _validateQuantity(
+                                          value, existingTool.takenQuantity);
+
+                                      if (error != null) {
+                                        quantityValidationErrors[
+                                            item.value.toolId] = error;
+                                      } else {
+                                        quantityValidationErrors
+                                            .remove(item.value.toolId);
+                                      }
+
+                                      List<String> quantities =
+                                          quantitiesController.text.split(',');
+                                      // Ensure the list is long enough
+                                      while (quantities.length <= index) {
+                                        quantities.add('1');
+                                      }
+                                      quantities[index] = value;
+                                      quantitiesController.text =
+                                          quantities.join(',');
+                                    });
+                                  },
+                                  keyboardType: TextInputType.number,
                                 ),
-                                controller: TextEditingController(
-                                    text: initialQuantity),
-                                onChanged: (value) {
-                                  List<String> quantities =
-                                      quantitiesController.text.split(',');
-                                  quantities[index] = value;
-                                  quantitiesController.text =
-                                      quantities.join(',');
-                                },
                               );
                             }).toList(),
                           ],
@@ -602,25 +793,49 @@ class ToolsDataTable extends StatelessWidget {
               actions: [
                 ElevatedButton(
                   onPressed: () {
-                    final selectedTools = controller.selectedItems
-                        .map((item) => item.value)
-                        .toList();
-                    final toolIds =
-                        selectedTools.map((tool) => tool.toolId).toList();
+                    bool hasErrors = false;
+                    final selectedTools = controller.selectedItems.isEmpty
+                        ? preSelectedItems
+                        : controller.selectedItems;
                     final quantities = quantitiesController.text
                         .split(',')
-                        .map((quantity) => int.parse(quantity))
+                        .map((quantity) => int.tryParse(quantity) ?? 0)
                         .toList();
 
-                    addToolsToJobInDatabase(job.jobId, toolIds, quantities);
-                    Navigator.of(context).pop();
+                    for (int i = 0; i < selectedTools.length; i++) {
+                      var existingTool = job.jobTools.firstWhere(
+                        (jt) => jt.tool.toolId == selectedTools[i].value.toolId,
+                        orElse: () => JobTool(
+                            tool: selectedTools[i].value,
+                            quantity: 1,
+                            takenQuantity: 0),
+                      );
+
+                      if (quantities[i] < existingTool.takenQuantity) {
+                        hasErrors = true;
+                        setState(() {
+                          quantityValidationErrors[
+                                  selectedTools[i].value.toolId] =
+                              'Cannot set below withdrawn amount (${existingTool.takenQuantity})';
+                        });
+                      }
+                    }
+
+                    if (!hasErrors) {
+                      final toolIds = selectedTools
+                          .map((item) => item.value.toolId)
+                          .toList();
+                      addToolsToJobInDatabase(job.jobId, toolIds, quantities);
+                      Navigator.of(context).pop();
+                    } else {
+                      _showToast("Please fix quantity errors before saving",
+                          Colors.red, Colors.white);
+                    }
                   },
                   child: Text('Save Changes'),
                 ),
                 ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                  },
+                  onPressed: () => Navigator.of(context).pop(),
                   child: Text('Cancel'),
                 ),
               ],
@@ -629,6 +844,20 @@ class ToolsDataTable extends StatelessWidget {
         );
       },
     );
+  }
+
+  String? _validateQuantity(String value, int minQuantity) {
+    final number = int.tryParse(value);
+    if (number == null) {
+      return 'Please enter a valid number';
+    }
+    if (number <= 0) {
+      return 'Quantity must be greater than 0';
+    }
+    if (number < minQuantity) {
+      return 'Cannot set below withdrawn quantity ($minQuantity)';
+    }
+    return null;
   }
 
   void _showToast(String message, Color backgroundColor, Color textColor) {
@@ -671,7 +900,7 @@ class ToolsDataTable extends StatelessWidget {
                 IconButton(
                   icon: Icon(Icons.settings),
                   onPressed: () {
-                    addToolsToJob(context);
+                    showManagementDialog(context);
                   },
                 ),
               ],
@@ -759,7 +988,7 @@ class ToolsDataTable extends StatelessWidget {
                 icon: Icon(Icons.settings),
                 color: Colors.black,
                 onPressed: () {
-                  addToolsToJob(context);
+                  showManagementDialog(context);
                 },
               ),
             ],
@@ -813,6 +1042,20 @@ class ToolsDataSource extends DataTableSource {
   }
 
   Future<void> updateToolQuantity(int toolId, int newQuantity) async {
+    // Find the current tool to check withdrawn quantity
+    final jobTool = jobTools.firstWhere(
+      (jt) => jt.tool.toolId == toolId,
+      orElse: () => throw Exception('Tool not found'),
+    );
+
+    if (newQuantity < jobTool.takenQuantity) {
+      _showToast(
+          "Cannot set quantity below withdrawn amount (${jobTool.takenQuantity})",
+          Colors.red,
+          Colors.white);
+      return;
+    }
+
     final client = AuthenticatedClient(http.Client(), AuthStorageService());
     final uri =
         Uri.parse('$baseUrl/jobs/$jobId/tools/$toolId?quantity=$newQuantity');
@@ -867,7 +1110,6 @@ class ToolsDataSource extends DataTableSource {
           IconButton(
             icon: Icon(Icons.edit),
             onPressed: () {
-              // Show edit dialog
               final TextEditingController quantityController =
                   TextEditingController(text: jobTool.quantity.toString());
 
@@ -880,13 +1122,23 @@ class ToolsDataSource extends DataTableSource {
                     children: [
                       Text('Tool: ${jobTool.tool.toolName}'),
                       SizedBox(height: 10),
-                      TextField(
-                        controller: quantityController,
-                        decoration: InputDecoration(
-                          labelText: 'New Quantity',
-                        ),
-                        keyboardType: TextInputType.number,
-                      ),
+                      StatefulBuilder(builder: (context, setState) {
+                        return TextField(
+                          controller: quantityController,
+                          decoration: InputDecoration(
+                            labelText: 'New Quantity',
+                            helperText:
+                                'Minimum quantity: ${jobTool.takenQuantity}',
+                            errorText: _validateQuantity(
+                                quantityController.text, jobTool.takenQuantity),
+                          ),
+                          keyboardType: TextInputType.number,
+                          onChanged: (value) {
+                            // Trigger rebuild to update error text
+                            setState(() {});
+                          },
+                        );
+                      }),
                     ],
                   ),
                   actions: [
@@ -898,9 +1150,16 @@ class ToolsDataSource extends DataTableSource {
                       onPressed: () {
                         final newQuantity =
                             int.tryParse(quantityController.text);
-                        if (newQuantity != null && newQuantity > 0) {
+                        if (newQuantity != null &&
+                            newQuantity >= jobTool.takenQuantity &&
+                            newQuantity > 0) {
                           updateToolQuantity(jobTool.tool.toolId, newQuantity);
-                          Navigator.pop(context);
+                        } else {
+                          // Show error toast
+                          _showToast(
+                              "Invalid quantity. Must be greater than withdrawn amount (${jobTool.takenQuantity})",
+                              Colors.red,
+                              Colors.white);
                         }
                       },
                       child: Text('Save'),
@@ -912,37 +1171,52 @@ class ToolsDataSource extends DataTableSource {
           ),
           IconButton(
             icon: Icon(Icons.delete),
-            onPressed: () {
-              // Show confirmation dialog
-              showDialog(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: Text('Confirm Removal'),
-                  content: Text(
-                      'Are you sure you want to remove ${jobTool.tool.toolName} from this job?'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: Text('Cancel'),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        deleteToolFromJob(jobTool.tool.toolId);
-                        Navigator.pop(context);
-                      },
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.red,
+            onPressed: jobTool.takenQuantity > 0
+                ? null // Disable the delete button if tools are withdrawn
+                : () {
+                    showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: Text('Confirm Removal'),
+                        content: Text(
+                            'Are you sure you want to remove ${jobTool.tool.toolName} from this job?'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: Text('Cancel'),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              deleteToolFromJob(jobTool.tool.toolId);
+                              Navigator.pop(context);
+                            },
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.red,
+                            ),
+                            child: Text('Remove'),
+                          ),
+                        ],
                       ),
-                      child: Text('Remove'),
-                    ),
-                  ],
-                ),
-              );
-            },
+                    );
+                  },
           ),
         ],
       )),
     ]);
+  }
+
+  String? _validateQuantity(String value, int minQuantity) {
+    final number = int.tryParse(value);
+    if (number == null) {
+      return 'Please enter a valid number';
+    }
+    if (number <= 0) {
+      return 'Quantity must be greater than 0';
+    }
+    if (number < minQuantity) {
+      return 'Cannot set below withdrawn quantity ($minQuantity)';
+    }
+    return null;
   }
 
   @override
