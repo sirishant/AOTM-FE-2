@@ -693,18 +693,25 @@ void _showAboutDialog(BuildContext context) {
     context: context,
     builder: (BuildContext context) {
       return AlertDialog(
-        title: Text('About Octaknight AOTM'),
+        title: Text('About'),
         content: SingleChildScrollView(
           child: ListBody(
             children: <Widget>[
-              Text('Octaknight AOTM'),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Octaknight AOTM', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),),
+                  Text('v0.2.9', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w300),),
+                ],
+              ),
               SizedBox(height: 10),
-              Text('Version: 1.0.0'),
-              SizedBox(height: 10),
-              Text('Developed by: Octaknight Team'),
+              Text('Developed by Octaknight Labs Pvt. Ltd.'),
               SizedBox(height: 10),
               Text(
-                  'Description: This is a placeholder description for the Octaknight AOTM system.'),
+                  'For any queries or feedback, please contact at:'),
+              SizedBox(height: 10),
+              Text('Email:   contact@octaknight.com'),
+              Text('Phone: +91 93414 48170'),
             ],
           ),
         ),
