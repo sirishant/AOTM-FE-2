@@ -1,4 +1,5 @@
 import 'package:aotm_fe_2/admin/dispenser_tools.dart';
+import 'package:aotm_fe_2/admin/employees.dart';
 import 'package:aotm_fe_2/admin/jobs.dart';
 import 'package:aotm_fe_2/main.dart';
 import 'package:aotm_fe_2/models/dispenser.dart';
@@ -30,7 +31,7 @@ class AdminDashboardState extends State<AdminDashboard> {
       case 1:
         page = Jobs();
       case 2:
-        page = Placeholder();
+        page = Employees();
       case 3:
         page = Placeholder();
       case 4:
@@ -700,18 +701,53 @@ void _showAboutDialog(BuildContext context) {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Octaknight AOTM', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),),
-                  Text('v0.2.9', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w300),),
+                  Text(
+                    'Octaknight AOTM',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    'v0.2.9',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w300),
+                  ),
                 ],
               ),
               SizedBox(height: 10),
               Text('Developed by Octaknight Labs Pvt. Ltd.'),
               SizedBox(height: 10),
-              Text(
-                  'For any queries or feedback, please contact at:'),
+              Text('For any queries or feedback, please contact at:'),
               SizedBox(height: 10),
-              Text('Email:   contact@octaknight.com'),
-              Text('Phone: +91 93414 48170'),
+              Padding(
+                padding: EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Column(
+                      children: [
+                        SizedBox(
+                          width: 120,
+                          child: Text(
+                            'Email:',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ),
+                    Expanded(
+                      child: Text('contact@octaknight.com'),
+                    ),
+                    SizedBox(
+                      width: 120,
+                      child: Text(
+                        'Phone No:',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    Expanded(
+                      child: Text('+91 93414 48170'),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
