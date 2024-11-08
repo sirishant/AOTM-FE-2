@@ -1,6 +1,7 @@
 import 'package:aotm_fe_2/admin/dispenser_tools.dart';
 import 'package:aotm_fe_2/admin/employees.dart';
 import 'package:aotm_fe_2/admin/jobs.dart';
+import 'package:aotm_fe_2/admin/tools.dart';
 import 'package:aotm_fe_2/main.dart';
 import 'package:aotm_fe_2/models/dispenser.dart';
 import 'package:aotm_fe_2/models/workshop.dart';
@@ -33,7 +34,7 @@ class AdminDashboardState extends State<AdminDashboard> {
       case 2:
         page = Employees();
       case 3:
-        page = Placeholder();
+        page = Tools();
       case 4:
         break;
       default:

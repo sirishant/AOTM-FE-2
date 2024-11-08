@@ -2,7 +2,7 @@ import 'package:aotm_fe_2/models/tool.dart';
 import 'package:aotm_fe_2/models/coordinate.dart';
 import 'package:aotm_fe_2/models/dispenser.dart';
 
-class Toolmap {
+class ToolMap {
   final int id;
   final Tool tool;
   final Coordinate coordinate;
@@ -11,7 +11,7 @@ class Toolmap {
   final int maxQuantity;
   final AlertLevel alertLevel;
 
-  Toolmap({
+  ToolMap({
     required this.id,
     required this.tool,
     required this.coordinate,
@@ -21,8 +21,8 @@ class Toolmap {
     required this.alertLevel,
   });
 
-  factory Toolmap.fromJson(Map<String, dynamic> json) {
-    return Toolmap(
+  factory ToolMap.fromJson(Map<String, dynamic> json) {
+    return ToolMap(
       id: json['id'],
       tool: Tool.fromJson(json['tool']),
       coordinate: Coordinate.fromJson(json['coordinate']),
@@ -47,6 +47,6 @@ class Toolmap {
 
   @override
   String toString() {
-    return 'Toolmap{id: $id, tool: $tool, coordinate: $coordinate, dispenser: $dispenser, currentQuantity: $currentQuantity, maxQuantity: $maxQuantity, alertLevel: $alertLevel}';
+    return 'ToolMap{id: $id, tool: $tool, coordinate: $coordinate, dispenser: $dispenser, currentQuantity: $currentQuantity, maxQuantity: $maxQuantity, alertLevel: $alertLevel}';
   }
 }
