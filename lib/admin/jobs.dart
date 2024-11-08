@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:aotm_fe_2/models/employee.dart';
@@ -13,19 +14,77 @@ import 'package:aotm_fe_2/start/auth_storage_service.dart';
 import 'package:flutter/material.dart';
 import 'package:multi_dropdown/multi_dropdown.dart';
 
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+class ToastService {
+  static final ToastService _instance = ToastService._internal();
+  factory ToastService() => _instance;
+  ToastService._internal();
+
+  BuildContext? _context;
+  FToast? _fToast;
+
+  void initialize(BuildContext context) {
+    _context = context;
+    _fToast = FToast();
+    _fToast?.init(context);
+  }
+
+  void showToast(String message, Color backgroundColor, Color textColor) {
+    // Return early if context or fToast is not initialized
+    if (_context == null || _fToast == null) {
+      print('Toast service not properly initialized');
+      return;
+    }
+
+    Widget toast = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12.0),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(25.0),
+        color: backgroundColor,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.info, color: textColor),
+          SizedBox(width: 12.0),
+          Text(message, style: TextStyle(color: textColor)),
+        ],
+      ),
+    );
+
+    _fToast?.showToast(
+      child: toast,
+      gravity: ToastGravity.BOTTOM,
+      toastDuration: Duration(seconds: 2),
+    );
+  }
+}
+
 class Jobs extends StatefulWidget {
   @override
   JobsState createState() => JobsState();
 }
 
 class JobsState extends State<Jobs> {
-  final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+  final toastService = ToastService();
   List<Job> allJobs = [];
   List<Job> filteredJobs = [];
   List<Workshop> workshops = [];
   List<Machine> machines = [];
   List<Tool> tools = [];
   List<Employee> employees = [];
+  final GlobalKey<State> _tableKey = GlobalKey<State>();
+  String? selectedWorkshop;
+  final TextEditingController _searchController = TextEditingController();
+  Timer? _debounceTimer;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _debounceTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -37,11 +96,98 @@ class JobsState extends State<Jobs> {
     _loadEmployees();
   }
 
-  void refreshJobs() async {
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    toastService.initialize(context);
+  }
+
+  void _filterJobs(String searchTerm) {
+    if (_debounceTimer?.isActive ?? false) _debounceTimer?.cancel();
+
+    _debounceTimer = Timer(const Duration(milliseconds: 500), () {
+      if (mounted) {
+        setState(() {
+          if (searchTerm.isEmpty) {
+            // If no search term, show all jobs or keep workshop filter
+            final workshopState =
+                context.findAncestorStateOfType<WorkshopDropdownState>();
+            if (workshopState?.selectedWorkshop != null &&
+                workshopState?.selectedWorkshop != 'All Workshops') {
+              filteredJobs = allJobs
+                  .where((job) =>
+                      job.workshop.workshopName ==
+                      workshopState?.selectedWorkshop)
+                  .toList();
+            } else {
+              filteredJobs = allJobs;
+            }
+          } else {
+            // Convert search term to lowercase for case-insensitive search
+            final searchLower = searchTerm.toLowerCase();
+
+            filteredJobs = allJobs.where((job) {
+              // Search in job title and description
+              if (job.title.toLowerCase().contains(searchLower)) return true;
+              if (job.description.toLowerCase().contains(searchLower)) {
+                return true;
+              }
+
+              // Search in employee names
+              for (var employee in job.employees) {
+                if (employee.employeeName.toLowerCase().contains(searchLower)) {
+                  return true;
+                }
+                // Also search employee ID
+                if (employee.empId.toString().contains(searchLower)) {
+                  return true;
+                }
+              }
+
+              // Search in tools
+              for (var jobTool in job.jobTools) {
+                if (jobTool.tool.toolName.toLowerCase().contains(searchLower)) {
+                  return true;
+                }
+                // Also search tool ID
+                if (jobTool.tool.toolId.toString().contains(searchLower)) {
+                  return true;
+                }
+              }
+
+              return false;
+            }).toList();
+
+            // Apply workshop filter if selected
+            if (selectedWorkshop != null &&
+                selectedWorkshop != 'All Workshops') {
+              filteredJobs = filteredJobs
+                  .where((job) => job.workshop.workshopName == selectedWorkshop)
+                  .toList();
+            }
+          }
+        });
+      }
+    });
+  }
+
+  Future<void> refreshJobs() async {
     List<Job> fetchedJobs = await _getJobs();
     if (mounted) {
       setState(() {
         allJobs = fetchedJobs;
+        // Update filteredJobs based on current workshop filter
+        final workshopState =
+            context.findAncestorStateOfType<WorkshopDropdownState>();
+        if (workshopState?.selectedWorkshop != null &&
+            workshopState?.selectedWorkshop != 'All Workshops') {
+          filteredJobs = fetchedJobs
+              .where((job) =>
+                  job.workshop.workshopName == workshopState?.selectedWorkshop)
+              .toList();
+        } else {
+          filteredJobs = fetchedJobs;
+        }
       });
     }
   }
@@ -151,116 +297,155 @@ class JobsState extends State<Jobs> {
   }
 
   void _addJob() {
-    showDialog(
-        context: context,
-        builder: (BuildContext context) {
-          // needed fields: title, description, workshopId, machineId
-          // employeeIds, toolmaps are not needed, will be added later in the form
-          final titleController = TextEditingController();
-          final descriptionController = TextEditingController();
-          final workshopIdController = TextEditingController();
-          final machineIdController = TextEditingController();
+  showDialog(
+    context: context,
+    builder: (BuildContext context) {
+      final formKey = GlobalKey<FormState>();
+      final titleController = TextEditingController();
+      final descriptionController = TextEditingController();
+      final workshopIdController = TextEditingController();
+      final machineIdController = TextEditingController();
 
-          return AlertDialog(
-            title: Text('Add Job'),
-            content: SizedBox(
-              width: MediaQuery.of(context).size.width * 0.5, // Increase width
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: titleController,
-                    decoration: InputDecoration(
-                      labelText: 'Title',
-                    ),
+      return AlertDialog(
+        title: Text('Add Job'),
+        content: SizedBox(
+          width: MediaQuery.of(context).size.width * 0.5,
+          child: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: titleController,
+                  decoration: InputDecoration(
+                    labelText: 'Title',
+                    border: OutlineInputBorder(),
                   ),
-                  SizedBox(height: 10),
-                  TextField(
-                    controller: descriptionController,
-                    decoration: InputDecoration(
-                      labelText: 'Description',
-                    ),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter a title';
+                    }
+                    return null;
+                  },
+                ),
+                SizedBox(height: 10),
+                TextFormField(
+                  controller: descriptionController,
+                  decoration: InputDecoration(
+                    labelText: 'Description',
+                    border: OutlineInputBorder(),
                   ),
-                  SizedBox(height: 10),
-                  DropdownButtonFormField<int>(
-                    value: null,
-                    items: [
-                      DropdownMenuItem<int>(
-                        value: null,
-                        child: Text(
-                          'Select Workshop',
-                          style: TextStyle(
-                              fontSize: 15, fontWeight: FontWeight.w400),
-                        ),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter a description';
+                    }
+                    return null;
+                  },
+                  maxLines: 3,
+                ),
+                SizedBox(height: 10),
+                DropdownButtonFormField<int>(
+                  value: null,
+                  decoration: InputDecoration(
+                    labelText: 'Workshop',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) {
+                    if (value == null) {
+                      return 'Please select a workshop';
+                    }
+                    return null;
+                  },
+                  items: workshops.map((workshop) {
+                    return DropdownMenuItem<int>(
+                      value: workshop.workshopId,
+                      child: Text(workshop.workshopName),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    workshopIdController.text = value?.toString() ?? '';
+                    // Clear machine selection when workshop changes
+                    machineIdController.clear();
+                  },
+                  hint: Text('Select Workshop'),
+                ),
+                SizedBox(height: 10),
+                ValueListenableBuilder(
+                  valueListenable: workshopIdController,
+                  builder: (context, TextEditingValue value, _) {
+                    final filteredMachines = machines
+                        .where((machine) =>
+                            machine.workshop.workshopId ==
+                            int.tryParse(value.text))
+                        .toList();
+                    return DropdownButtonFormField<int>(
+                      value: null,
+                      validator: (value) {
+                        if (value == null) {
+                          return 'Please select a machine';
+                        }
+                        return null;
+                      },
+                      items: filteredMachines.isEmpty
+                          ? []
+                          : filteredMachines.map((machine) {
+                              return DropdownMenuItem<int>(
+                                value: machine.machineNo,
+                                child: Text(machine.machineName),
+                              );
+                            }).toList(),
+                      onChanged: workshopIdController.text.isEmpty
+                          ? null
+                          : (value) {
+                              machineIdController.text = value?.toString() ?? '';
+                            },
+                      decoration: InputDecoration(
+                        labelText: 'Machine',
+                        border: OutlineInputBorder(),
                       ),
-                      ...workshops.map((workshop) {
-                        return DropdownMenuItem<int>(
-                          value: workshop.workshopId,
-                          child: Text(workshop.workshopName),
-                        );
-                      }).toList(),
-                    ],
-                    onChanged: (value) {
-                      workshopIdController.text = value.toString();
-                    },
-                    decoration: InputDecoration(
-                      labelText: 'Workshop',
-                    ),
-                  ),
-                  SizedBox(height: 10),
-                  ValueListenableBuilder(
-                    valueListenable: workshopIdController,
-                    builder: (context, TextEditingValue value, _) {
-                      final filteredMachines = machines
-                          .where((machine) =>
-                              machine.workshop.workshopId ==
-                              int.tryParse(value.text))
-                          .toList();
-                      return DropdownButtonFormField<int>(
-                        value: filteredMachines.isNotEmpty
-                            ? filteredMachines[0].machineNo
-                            : null,
-                        items: filteredMachines.map((machine) {
-                          return DropdownMenuItem<int>(
-                            value: machine.machineNo,
-                            child: Text(machine.machineName),
-                          );
-                        }).toList(),
-                        onChanged: (value) {
-                          machineIdController.text = value.toString();
-                        },
-                        decoration: InputDecoration(
-                          labelText: 'Machine',
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              ),
+                      hint: Text('Select Machine'),
+                      disabledHint: Text('Select a workshop first'),
+                    );
+                  },
+                ),
+              ],
             ),
-            actions: [
-              ElevatedButton(
-                onPressed: () {
-                  addJobToDatabase(
-                    titleController.text,
-                    descriptionController.text,
-                    int.parse(workshopIdController.text),
-                    int.parse(machineIdController.text),
-                  );
-                  Navigator.of(context).pop();
-                },
-                child: Text('Add'),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                },
-                child: Text('Cancel'),
-              ),
-            ],
-          );
-        });
-  }
+          ),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              if (formKey.currentState!.validate()) {
+                // All fields are valid, proceed with job creation
+                addJobToDatabase(
+                  titleController.text,
+                  descriptionController.text,
+                  int.parse(workshopIdController.text),
+                  int.parse(machineIdController.text),
+                );
+                Navigator.of(context).pop();
+                
+                // Show success message
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Job created successfully'),
+                    backgroundColor: Colors.green,
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              }
+            },
+            child: Text('Add'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text('Cancel'),
+          ),
+        ],
+      );
+    },
+  );
+}
 
   void addJobToDatabase(
       String title, String description, int workshopId, int machineId) async {
@@ -282,7 +467,12 @@ class JobsState extends State<Jobs> {
 
     if (response.statusCode == 201) {
       print('Job added successfully');
-      refreshJobs();
+      await refreshJobs();
+      // Reset workshop filter to show all jobs
+      setState(() {
+        selectedWorkshop = 'All Workshops';
+        filteredJobs = allJobs;
+      });
     } else {
       print('Failed to add job with status code: ${response.statusCode}');
     }
@@ -310,92 +500,119 @@ class JobsState extends State<Jobs> {
           ],
         ),
         actions: [
-          // search bar with text and button icon
           Padding(
             padding: const EdgeInsets.all(8.0),
             child: SizedBox(
-              width: 200,
+              width: 300, // Increased width for better visibility
               child: TextField(
+                controller: _searchController,
                 decoration: InputDecoration(
-                  hintText: 'Search',
-                  suffixIcon: Icon(Icons.search),
+                  hintText: 'Search jobs, employees, tools...',
+                  suffixIcon: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_searchController.text.isNotEmpty)
+                        IconButton(
+                          icon: Icon(Icons.clear),
+                          onPressed: () {
+                            _searchController.clear();
+                            _filterJobs('');
+                          },
+                        ),
+                      Icon(Icons.search),
+                    ],
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 16),
                 ),
+                onChanged: _filterJobs,
               ),
             ),
           ),
         ],
       ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.start,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // workshop dropdown
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
-              child: WorkshopDropdown(
-                jobs: allJobs,
-                onFiltered: (filteredJobs) {
-                  setState(() {
-                    this.filteredJobs = filteredJobs;
-                  });
-                },
-              ),
-            ),
-            // list of jobs as ExpansionTile
-            Expanded(
-              child: ListView.builder(
-                itemCount: filteredJobs.length,
-                itemBuilder: (context, index) {
-                  final job = filteredJobs[index];
-                  bool isExpanded = false;
-                  return StatefulBuilder(
-                    builder: (context, setState) {
-                      return Container(
-                        color: isExpanded
-                            ? Colors.blue.withOpacity(0.02)
-                            : Colors.transparent,
-                        child: ExpansionTile(
-                          title: Text(
-                            'Job #${job.jobId} | ${job.title}',
-                            style: TextStyle(
-                                fontSize: 16, fontWeight: FontWeight.w400),
-                          ),
-                          onExpansionChanged: (expanded) {
-                            setState(() {
-                              isExpanded = expanded;
-                            });
-                          },
-                          children: [
-                            Column(
-                              mainAxisAlignment: MainAxisAlignment.start,
+      body: Builder(
+        builder: (BuildContext context) {
+          // Initialize toast service with the correct context
+          toastService.initialize(context);
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
+                  child: WorkshopDropdown(
+                    jobs: allJobs,
+                    onFiltered: (filteredJobs) {
+                      setState(() {
+                        this.filteredJobs = filteredJobs;
+                      });
+                    },
+                  ),
+                ),
+                Expanded(
+                  child: ListView.builder(
+                    key: _tableKey, // Add key to force rebuild
+                    itemCount: filteredJobs.length,
+                    itemBuilder: (context, index) {
+                      final job = filteredJobs[index];
+                      bool isExpanded = false;
+                      return StatefulBuilder(
+                        builder: (context, setState) {
+                          return Container(
+                            color: isExpanded
+                                ? Colors.blue.withOpacity(0.02)
+                                : Colors.transparent,
+                            child: ExpansionTile(
+                              title: Text(
+                                'Job #${job.jobId} | ${job.title}',
+                                style: TextStyle(
+                                    fontSize: 16, fontWeight: FontWeight.w400),
+                              ),
+                              onExpansionChanged: (expanded) {
+                                setState(() {
+                                  isExpanded = expanded;
+                                });
+                              },
                               children: [
-                                SizedBox(height: 10),
-                                Padding(
-                                  padding: const EdgeInsets.all(8.0),
-                                  child: Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: ToolsDataTable(
-                                        job: job,
-                                        allJobs: allJobs,
-                                        refreshJobs: refreshJobs,
-                                        tools: tools,
-                                        employees: employees,
-                                        navigatorKey: navigatorKey),
-                                  ),
-                                ),
+                                Column(
+                                  mainAxisAlignment: MainAxisAlignment.start,
+                                  children: [
+                                    SizedBox(height: 10),
+                                    Padding(
+                                      padding: const EdgeInsets.all(8.0),
+                                      child: Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: ToolsDataTable(
+                                          job: job,
+                                          allJobs: allJobs,
+                                          refreshJobs: refreshJobs,
+                                          tools: tools,
+                                          employees: employees,
+                                          navigatorKey: navigatorKey,
+                                          toastService: toastService,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                )
                               ],
-                            )
-                          ],
-                        ),
+                            ),
+                          );
+                        },
                       );
                     },
-                  );
-                },
-              ),
+                  ),
+                ),
+                SizedBox(height: 20),
+              ],
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -403,20 +620,23 @@ class JobsState extends State<Jobs> {
 
 class ToolsDataTable extends StatelessWidget {
   final Job job;
-  final Function refreshJobs;
   final List<Job> allJobs;
+  final Function refreshJobs;
   final List<Tool> tools;
   final List<Employee> employees;
   final GlobalKey<NavigatorState> navigatorKey;
+  final ToastService toastService;
 
-  ToolsDataTable({
+  const ToolsDataTable({
+    Key? key,
     required this.job,
     required this.allJobs,
     required this.refreshJobs,
     required this.tools,
     required this.employees,
     required this.navigatorKey,
-  });
+    required this.toastService,
+  }) : super(key: key);
 
   Future<void> updateJobEmployees(int jobId, List<int> employeeIds) async {
     final client = AuthenticatedClient(http.Client(), AuthStorageService());
@@ -432,7 +652,7 @@ class ToolsDataTable extends StatelessWidget {
       if (response.statusCode == 201) {
         _showToast(
             "Employees updated successfully", Colors.green, Colors.white);
-        refreshJobs();
+        await refreshJobs();
       } else {
         _showToast(
             "Failed to update employees with response ${response.statusCode}",
@@ -464,9 +684,40 @@ class ToolsDataTable extends StatelessWidget {
 
       if (response.statusCode == 201) {
         _showToast("Tools added successfully", Colors.green, Colors.white);
-        refreshJobs();
+        await refreshJobs();
       } else {
         _showToast("Failed to add tools", Colors.red, Colors.white);
+      }
+    } catch (e) {
+      _showToast("Error: ${e.toString()}", Colors.red, Colors.white);
+    }
+  }
+
+  Future<void> deleteJobFromDatabase(BuildContext context) async {
+    final client = AuthenticatedClient(http.Client(), AuthStorageService());
+    final uri = Uri.parse('$baseUrl/jobs/${job.jobId}');
+
+    try {
+      final response = await client.delete(uri);
+
+      if (response.statusCode == 204) {
+        _showToast("Job deleted successfully", Colors.green, Colors.white);
+        Navigator.of(context).pop(); // Close the confirmation dialog
+        await refreshJobs(); // This will now properly update the parent state
+
+        // Find the closest parent ExpansionTile and collapse it if needed
+        if (navigatorKey.currentContext != null) {
+          // You might need to traverse up to find the correct parent widget to rebuild
+          final state =
+              navigatorKey.currentContext!.findAncestorStateOfType<JobsState>();
+          if (state != null && state.mounted) {
+            state.setState(() {
+              // Force a rebuild of the Jobs widget
+            });
+          }
+        }
+      } else {
+        _showToast("Failed to delete job", Colors.red, Colors.white);
       }
     } catch (e) {
       _showToast("Error: ${e.toString()}", Colors.red, Colors.white);
@@ -624,9 +875,7 @@ class ToolsDataTable extends StatelessWidget {
       bool isSelected =
           job.jobTools.any((jobTool) => jobTool.tool.toolId == tool.toolId);
       return DropdownItem(
-          label: tool.toolName,
-          value: tool,
-          selected: isSelected);
+          label: tool.toolName, value: tool, selected: isSelected);
     }).toList();
 
     // Pre-select existing tools
@@ -861,29 +1110,7 @@ class ToolsDataTable extends StatelessWidget {
   }
 
   void _showToast(String message, Color backgroundColor, Color textColor) {
-    Widget toast = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12.0),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(25.0),
-        color: backgroundColor,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.info, color: textColor),
-          SizedBox(width: 12.0),
-          Text(message, style: TextStyle(color: textColor)),
-        ],
-      ),
-    );
-
-    FToast fToast = FToast();
-
-    fToast.showToast(
-      child: toast,
-      gravity: ToastGravity.BOTTOM,
-      toastDuration: Duration(seconds: 2),
-    );
+    toastService.showToast(message, backgroundColor, textColor);
   }
 
   @override
@@ -903,95 +1130,162 @@ class ToolsDataTable extends StatelessWidget {
                     showManagementDialog(context);
                   },
                 ),
+                IconButton(
+                  icon: Icon(Icons.delete),
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder: (BuildContext dialogContext) {
+                        return AlertDialog(
+                          title: Text('Delete Job'),
+                          content:
+                              Text('Are you sure you want to delete this job?'),
+                          actions: [
+                            TextButton(
+                              onPressed: () {
+                                Navigator.pop(dialogContext);
+                              },
+                              child: Text('Cancel'),
+                            ),
+                            TextButton(
+                              onPressed: () async {
+                                // Pass the dialog context
+                                await deleteJobFromDatabase(dialogContext);
+                              },
+                              child: Text('Delete'),
+                            ),
+                          ],
+                        );
+                      },
+                    );
+                  },
+                )
               ],
             ),
           )
-        : PaginatedDataTable(
-            columnSpacing: MediaQuery.of(context).size.width * 0.1,
-            header: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          'Job #${job.jobId}',
-                          style: TextStyle(fontSize: 16),
-                        ),
-                      ],
-                    ),
-                    Text(
-                      job.title,
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          'Assigned to: ',
-                          style: TextStyle(
-                              fontSize: 13, fontWeight: FontWeight.w400),
-                        ),
-                        Text(
-                          {
-                            for (Employee emp in job.employees)
-                              '#${emp.empId} | ${_toCamelCase(emp.employeeName)}'
-                          }.join(', '),
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w400,
+        : SingleChildScrollView(
+            child: PaginatedDataTable(
+              columnSpacing: MediaQuery.of(context).size.width * 0.1,
+              header: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            'Job #${job.jobId}',
+                            style: TextStyle(fontSize: 16),
                           ),
+                        ],
+                      ),
+                      Text(
+                        job.title,
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w500,
                         ),
-                        SizedBox(width: 10),
-                      ],
-                    ),
-                  ],
+                      ),
+                    ],
+                  ),
+                  Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            'Assigned to: ',
+                            style: TextStyle(
+                                fontSize: 13, fontWeight: FontWeight.w400),
+                          ),
+                          Text(
+                            {
+                              for (Employee emp in job.employees)
+                                '#${emp.empId} | ${_toCamelCase(emp.employeeName)}'
+                            }.join(', '),
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                          SizedBox(width: 10),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              columns: [
+                DataColumn(
+                    label: Expanded(
+                        child: Text('Tool #', textAlign: TextAlign.center))),
+                DataColumn(
+                    label: Expanded(
+                        child: Text('Tool Name', textAlign: TextAlign.center))),
+                DataColumn(
+                    label: Expanded(
+                        child: Text('Withdrawn Quantity',
+                            textAlign: TextAlign.center))),
+                DataColumn(
+                    label: Expanded(
+                        child: Text('Quantity Assigned',
+                            textAlign: TextAlign.center))),
+                DataColumn(
+                    label: Expanded(
+                        child: Text('Modify', textAlign: TextAlign.center))),
+              ],
+              source: ToolsDataSource(
+                job.jobTools,
+                refreshJobs,
+                job.jobId,
+                navigatorKey,
+                context,
+                toastService,
+              ),
+              rowsPerPage: 5,
+              actions: [
+                IconButton(
+                  icon: Icon(Icons.settings),
+                  color: Colors.black,
+                  onPressed: () {
+                    showManagementDialog(context);
+                  },
                 ),
+                IconButton(
+                  icon: Icon(Icons.delete),
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder: (BuildContext dialogContext) {
+                        return AlertDialog(
+                          title: Text('Delete Job'),
+                          content:
+                              Text('Are you sure you want to delete this job?'),
+                          actions: [
+                            TextButton(
+                              onPressed: () {
+                                Navigator.pop(dialogContext);
+                              },
+                              child: Text('Cancel'),
+                            ),
+                            TextButton(
+                              onPressed: () async {
+                                // Pass the dialog context
+                                await deleteJobFromDatabase(dialogContext);
+                              },
+                              child: Text('Delete'),
+                            ),
+                          ],
+                        );
+                      },
+                    );
+                  },
+                )
               ],
             ),
-            columns: [
-              DataColumn(
-                  label: Expanded(
-                      child: Text('Tool #', textAlign: TextAlign.center))),
-              DataColumn(
-                  label: Expanded(
-                      child: Text('Tool Name', textAlign: TextAlign.center))),
-              DataColumn(
-                  label: Expanded(
-                      child: Text('Withdrawn Quantity',
-                          textAlign: TextAlign.center))),
-              DataColumn(
-                  label: Expanded(
-                      child: Text('Quantity Assigned',
-                          textAlign: TextAlign.center))),
-              DataColumn(
-                  label: Expanded(
-                      child: Text('Modify', textAlign: TextAlign.center))),
-            ],
-            source: ToolsDataSource(
-                job.jobTools, refreshJobs, job.jobId, navigatorKey, context),
-            rowsPerPage: job.jobTools.length < 5 ? job.jobTools.length : 5,
-            actions: [
-              // edit button
-              IconButton(
-                icon: Icon(Icons.settings),
-                color: Colors.black,
-                onPressed: () {
-                  showManagementDialog(context);
-                },
-              ),
-            ],
           );
   }
 
@@ -1009,36 +1303,19 @@ class ToolsDataSource extends DataTableSource {
   final int jobId;
   final GlobalKey<NavigatorState> navigatorKey;
   final BuildContext context;
-  late FToast fToast;
+  final ToastService toastService;
 
-  ToolsDataSource(this.jobTools, this.refreshJobs, this.jobId,
-      this.navigatorKey, this.context) {
-    fToast = FToast();
-    fToast.init(context);
-  }
+  ToolsDataSource(
+    this.jobTools,
+    this.refreshJobs,
+    this.jobId,
+    this.navigatorKey,
+    this.context,
+    this.toastService,
+  );
 
   void _showToast(String message, Color backgroundColor, Color textColor) {
-    Widget toast = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12.0),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(25.0),
-        color: backgroundColor,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.info, color: textColor),
-          SizedBox(width: 12.0),
-          Text(message, style: TextStyle(color: textColor)),
-        ],
-      ),
-    );
-
-    fToast.showToast(
-      child: toast,
-      gravity: ToastGravity.BOTTOM,
-      toastDuration: Duration(seconds: 2),
-    );
+    toastService.showToast(message, backgroundColor, textColor);
   }
 
   Future<void> updateToolQuantity(int toolId, int newQuantity) async {
@@ -1066,16 +1343,13 @@ class ToolsDataSource extends DataTableSource {
       if (response.statusCode == 200) {
         _showToast(
             "Tool quantity updated successfully", Colors.green, Colors.white);
-        refreshJobs();
+        await refreshJobs();
+        Navigator.pop(context); // Move Navigator.pop after refresh
       } else {
         _showToast("Failed to update tool quantity", Colors.red, Colors.white);
       }
     } catch (e) {
       _showToast("Error: ${e.toString()}", Colors.red, Colors.white);
-    }
-
-    if (navigatorKey.currentState?.mounted ?? false) {
-      Navigator.pop(context);
     }
   }
 
@@ -1088,7 +1362,7 @@ class ToolsDataSource extends DataTableSource {
 
       if (response.statusCode == 204) {
         _showToast("Tool removed successfully", Colors.green, Colors.white);
-        refreshJobs();
+        await refreshJobs();
       } else {
         _showToast("Failed to remove tool", Colors.red, Colors.white);
       }
@@ -1240,7 +1514,7 @@ class WorkshopDropdown extends StatefulWidget {
 }
 
 class WorkshopDropdownState extends State<WorkshopDropdown> {
-  String? selectedWorkshop;
+  String? selectedWorkshop = 'All Workshops'; // Default to "All Workshops"
 
   @override
   Widget build(BuildContext context) {

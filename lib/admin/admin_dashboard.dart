@@ -157,16 +157,20 @@ class AdminDashHomeState extends State<AdminDashHome> {
 
   Future<void> _loadWorkshops() async {
     List<Workshop> fetchedWorkshops = await _getWorkshops();
-    setState(() {
-      workshops = fetchedWorkshops;
-    });
+    if (mounted) {
+      setState(() {
+        workshops = fetchedWorkshops;
+      });
+    }
   }
 
   Future<void> _loadDispensers() async {
     List<Dispenser> fetchedDispensers = await _getDispensers();
-    setState(() {
-      dispensers = fetchedDispensers;
-    });
+    if (mounted) {
+      setState(() {
+        dispensers = fetchedDispensers;
+      });
+    }
   }
 
   Future<void> _loadNotifications() async {
