@@ -704,18 +704,6 @@ class ToolsDataTable extends StatelessWidget {
         _showToast("Job deleted successfully", Colors.green, Colors.white);
         Navigator.of(context).pop(); // Close the confirmation dialog
         await refreshJobs(); // This will now properly update the parent state
-
-        // Find the closest parent ExpansionTile and collapse it if needed
-        if (navigatorKey.currentContext != null) {
-          // You might need to traverse up to find the correct parent widget to rebuild
-          final state =
-              navigatorKey.currentContext!.findAncestorStateOfType<JobsState>();
-          if (state != null && state.mounted) {
-            state.setState(() {
-              // Force a rebuild of the Jobs widget
-            });
-          }
-        }
       } else {
         _showToast("Failed to delete job", Colors.red, Colors.white);
       }
