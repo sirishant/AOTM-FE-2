@@ -153,7 +153,8 @@ class ToolsState extends State<Tools> {
     );
   }
 
-  Future<Tool?> _createTool(String name, String category, int size, String returnability) async {
+  Future<Tool?> _createTool(
+      String name, String category, int size, String returnability) async {
     final client = AuthenticatedClient(http.Client(), AuthStorageService());
     final uri = Uri.parse('$baseUrl/tools');
     final response = await client.post(
@@ -248,7 +249,8 @@ class ToolsState extends State<Tools> {
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: selectedImage != null
-                                  ? Image.file(selectedImage!, fit: BoxFit.cover)
+                                  ? Image.file(selectedImage!,
+                                      fit: BoxFit.cover)
                                   : Icon(Icons.build, size: 50),
                             ),
                             Positioned(
@@ -486,10 +488,13 @@ class _ToolCardState extends State<ToolCard> {
   }
 
   Future<void> _loadToolData() async {
-    await Future.wait([
-      _loadToolMaps(),
-      _loadToolImage(),
-    ]);
+    try {
+      // Load the data sequentially instead of using Future.wait
+      await _loadToolMaps();
+      await _loadToolImage();
+    } catch (e) {
+      print('Error in _loadToolData: $e');
+    }
   }
 
   Future<void> _loadToolMaps() async {
@@ -498,18 +503,38 @@ class _ToolCardState extends State<ToolCard> {
 
     try {
       final response = await client.get(uri);
+
       if (response.statusCode == 200) {
+        final List<dynamic> jsonResponse = json.decode(response.body);
+
+        if (mounted) {
+          final List<ToolMap> parsedMaps = [];
+
+          for (var item in jsonResponse) {
+            try {
+              final toolMap = ToolMap.fromJson(item as Map<String, dynamic>);
+              parsedMaps.add(toolMap);
+            } catch (e) {
+              print('Error parsing individual tool map: $e');
+              print('Problematic JSON: $item');
+            }
+          }
+
+          setState(() {
+            toolMaps = parsedMaps;
+            isLoading = false;
+          });
+        }
+      } else {
+        print('Failed to fetch tool maps: ${response.statusCode}');
         if (mounted) {
           setState(() {
-            toolMaps = (json.decode(response.body) as List)
-                .map((json) => ToolMap.fromJson(json))
-                .toList();
             isLoading = false;
           });
         }
       }
     } catch (e) {
-      print('Error loading tool maps: $e');
+      print('Exception in _loadToolMaps: $e');
       if (mounted) {
         setState(() {
           isLoading = false;
@@ -519,20 +544,20 @@ class _ToolCardState extends State<ToolCard> {
   }
 
   Future<void> _loadToolImage() async {
+    if (!mounted) return;
+
     final client = AuthenticatedClient(http.Client(), AuthStorageService());
     final uri = Uri.parse('$baseUrl/tools/${widget.tool.toolId}/image');
 
     try {
       final response = await client.get(uri);
-      if (response.statusCode == 200) {
-        if (mounted) {
-          final List<dynamic> base64Images = json.decode(response.body);
-          if (base64Images.isNotEmpty) {
-            final bytes = base64Decode(base64Images[0]);
-            setState(() {
-              toolImage = MemoryImage(bytes);
-            });
-          }
+      if (response.statusCode == 200 && mounted) {
+        final List<dynamic> base64Images = json.decode(response.body);
+        if (base64Images.isNotEmpty) {
+          final bytes = base64Decode(base64Images[0]);
+          setState(() {
+            toolImage = MemoryImage(bytes);
+          });
         }
       }
     } catch (e) {
@@ -684,62 +709,78 @@ class _ToolCardState extends State<ToolCard> {
                 if (isLoading)
                   Center(child: CircularProgressIndicator())
                 else if (toolMaps.isEmpty)
-                  Text('Tool not available in any dispenser')
+                  Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8.0),
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline, color: Colors.orange),
+                        SizedBox(width: 8),
+                        Text('Tool not currently mapped to any dispenser'),
+                      ],
+                    ),
+                  )
                 else
                   ...toolMaps
-                      .map((toolMap) => Padding(
-                            padding: EdgeInsets.symmetric(vertical: 4),
-                            child: Row(
-                              children: [
-                                Icon(Icons.location_on, size: 16),
-                                SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(toolMap.dispenser.dispenserName),
-                                ),
-                                Container(
-                                  padding: EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: {
-                                          'HIGH': Colors.red[100],
-                                          'MEDIUM': Colors.orange[100],
-                                          'LOW': Colors.green[100],
-                                        }[toolMap.alertLevel] ??
-                                        Colors.grey[100],
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Text(
-                                    '${toolMap.currentQuantity}/${toolMap.maxQuantity}',
-                                    style: TextStyle(
-                                      color: {
-                                            'HIGH': Colors.red[900],
-                                            'MEDIUM': Colors.orange[900],
-                                            'LOW': Colors.green[900],
-                                          }[toolMap.alertLevel] ??
-                                          Colors.grey[900],
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ))
+                      .map((toolMap) => _buildToolMapItem(toolMap))
                       .toList(),
-                SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    ElevatedButton.icon(
-                      icon: Icon(Icons.info),
-                      label: Text('View Details'),
-                      onPressed: _showToolDetails,
-                    ),
-                  ],
-                ),
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildToolMapItem(ToolMap toolMap) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.location_on, size: 16),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(toolMap.dispenser.dispenserName),
+              ),
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: {
+                        'HIGH': Colors.red[100],
+                        'MEDIUM': Colors.orange[100],
+                        'LOW': Colors.green[100],
+                      }[toolMap.alertLevel] ??
+                      Colors.grey[100],
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '${toolMap.currentQuantity}/${toolMap.maxQuantity}',
+                  style: TextStyle(
+                    color: {
+                          'HIGH': Colors.red[900],
+                          'MEDIUM': Colors.orange[900],
+                          'LOW': Colors.green[900],
+                        }[toolMap.alertLevel] ??
+                        Colors.grey[900],
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+            Padding(
+              padding: EdgeInsets.only(left: 24, top: 4),
+              child: Text(
+                'Location: (${toolMap.coordinate.coordX}, ${toolMap.coordinate.coordZ})',
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontSize: 12,
+                ),
+              ),
+            ),
         ],
       ),
     );

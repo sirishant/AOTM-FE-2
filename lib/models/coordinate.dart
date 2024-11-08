@@ -10,18 +10,25 @@ class Coordinate {
   });
 
   factory Coordinate.fromJson(Map<String, dynamic> json) {
-    return Coordinate(
-      coordId: json['coordId'],
-      coordZ: json['coordZ'],
-      coordX: json['coordX'],
-    );
+    try {
+      return Coordinate(
+        coordId: json['coordinateNo'], // Changed from coordId to coordinateNo
+        coordZ: json['coordinateZ'],
+        coordX: json['coordinateX'],
+      );
+    } catch (e) {
+      print('Error parsing Coordinate:');
+      print('JSON: $json');
+      print('Error: $e');
+      rethrow;
+    }
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'coordId': coordId,
-      'coordZ': coordZ,
-      'coordX': coordX,
+      'coordinateNo': coordId,  // Changed to match API response
+      'coordinateZ': coordZ,
+      'coordinateX': coordX,
     };
   }
 

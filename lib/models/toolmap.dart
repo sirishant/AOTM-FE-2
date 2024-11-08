@@ -9,7 +9,7 @@ class ToolMap {
   final Dispenser dispenser;
   final int currentQuantity;
   final int maxQuantity;
-  final AlertLevel alertLevel;
+  final String alertLevel;
 
   ToolMap({
     required this.id,
@@ -22,15 +22,28 @@ class ToolMap {
   });
 
   factory ToolMap.fromJson(Map<String, dynamic> json) {
-    return ToolMap(
-      id: json['id'],
-      tool: Tool.fromJson(json['tool']),
-      coordinate: Coordinate.fromJson(json['coordinate']),
-      dispenser: Dispenser.fromJson(json['dispenser']),
-      currentQuantity: json['currentQuantity'],
-      maxQuantity: json['maxQuantity'],
-      alertLevel: json['alertLevel'],
-    );
+    // Add debug print to see the exact JSON structure
+    print('Parsing ToolMap JSON: $json');
+    
+    try {
+      return ToolMap(
+        id: json['id'] is int ? json['id'] : int.parse(json['id'].toString()),
+        tool: Tool.fromJson(json['tool'] as Map<String, dynamic>),
+        coordinate: Coordinate.fromJson(json['coordinate'] as Map<String, dynamic>),
+        dispenser: Dispenser.fromJson(json['dispenser'] as Map<String, dynamic>),
+        currentQuantity: json['currentQuantity'] is int ? json['currentQuantity'] : int.parse(json['currentQuantity'].toString()),
+        maxQuantity: json['maxQuantity'] is int ? json['maxQuantity'] : int.parse(json['maxQuantity'].toString()),
+        alertLevel: json['alertLevel']?.toString() ?? 'LOW',
+      );
+    } catch (e, stackTrace) {
+      print('Error details in ToolMap.fromJson:');
+      print('id type: ${json['id']?.runtimeType}');
+      print('currentQuantity type: ${json['currentQuantity']?.runtimeType}');
+      print('maxQuantity type: ${json['maxQuantity']?.runtimeType}');
+      print('Error: $e');
+      print('Stack trace: $stackTrace');
+      rethrow;
+    }
   }
 
   Map<String, dynamic> toJson() {
